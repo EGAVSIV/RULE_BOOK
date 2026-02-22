@@ -55,9 +55,9 @@ rules = [
         "title": "RULE 1 - Trend Confirmation",
         "description": """
         • Trade only in direction of Higher Timeframe Trend  
-        • 15m must align with 1H  
-        • ADX > 25  
-        • Avoid sideways market
+        • Buy on Every DIPs 
+        • RD and FIB Retracement  
+        • Use EMA 20 and 50 Reversal  
         """,
         "image": "images/rule1.png"
     },
