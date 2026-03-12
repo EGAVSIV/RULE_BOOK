@@ -1,10 +1,10 @@
 import streamlit as st
+import cv2
+import numpy as np
 from PIL import Image
 import os
 import json
 import uuid
-from deepface import DeepFace
-import tempfile
 
 # ======================================
 # CONFIG
@@ -18,15 +18,19 @@ FACE_DB = "faces_db"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 os.makedirs(FACE_DB, exist_ok=True)
 
+# Load Haar Cascade for face detection
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
+
 # ======================================
 # SESSION STATE
 # ======================================
 if "face_authenticated" not in st.session_state:
     st.session_state.face_authenticated = False
 
-
 # ======================================
-# LOAD RULES
+# RULE STORAGE
 # ======================================
 def load_rules():
     if os.path.exists(DATA_FILE):
@@ -34,13 +38,35 @@ def load_rules():
             return json.load(f)
     return []
 
-
 def save_rules(rules):
     with open(DATA_FILE, "w") as f:
         json.dump(rules, f, indent=4)
 
-
 rules = load_rules()
+
+# ======================================
+# FACE MATCH FUNCTION
+# ======================================
+def extract_face(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+    for (x, y, w, h) in faces:
+        return img[y:y+h, x:x+w]
+
+    return None
+
+
+def compare_faces(face1, face2):
+
+    face1 = cv2.resize(face1, (200, 200))
+    face2 = cv2.resize(face2, (200, 200))
+
+    diff = cv2.absdiff(face1, face2)
+    score = np.mean(diff)
+
+    return score
+
 
 # ======================================
 # CUSTOM STYLE
@@ -88,6 +114,7 @@ if menu == "📖 View Rules":
         st.info("No rules added yet.")
     else:
         for rule in rules:
+
             st.markdown(f'<div class="rule-header">{rule["title"]}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="rule-box">', unsafe_allow_html=True)
@@ -107,67 +134,59 @@ if menu == "📖 View Rules":
 # ======================================
 if menu == "🔐 Admin Panel":
 
-    # ===============================
-    # FACE AUTHENTICATION
-    # ===============================
     if not st.session_state.face_authenticated:
 
-        st.subheader("📷 Face Authentication Required")
+        st.subheader("📷 Face Authentication")
 
         img_file = st.camera_input("Scan Your Face")
 
-        if img_file is not None:
+        if img_file:
 
-            temp_file = tempfile.NamedTemporaryFile(delete=False)
-            temp_file.write(img_file.getvalue())
-            captured_path = temp_file.name
+            captured_img = Image.open(img_file)
+            captured_np = np.array(captured_img)
 
-            matched = False
-            user = ""
+            captured_face = extract_face(captured_np)
 
-            for file in os.listdir(FACE_DB):
+            if captured_face is None:
+                st.error("No face detected")
+            else:
 
-                db_img = os.path.join(FACE_DB, file)
+                matched = False
 
-                try:
-                    result = DeepFace.verify(
-                        img1_path=captured_path,
-                        img2_path=db_img,
-                        enforce_detection=False
-                    )
+                for file in os.listdir(FACE_DB):
 
-                    if result["verified"]:
+                    db_path = os.path.join(FACE_DB, file)
+
+                    db_img = cv2.imread(db_path)
+
+                    db_face = extract_face(db_img)
+
+                    if db_face is None:
+                        continue
+
+                    score = compare_faces(captured_face, db_face)
+
+                    if score < 40:  # similarity threshold
                         matched = True
                         user = file.split(".")[0]
                         break
 
-                except:
-                    pass
+                if matched:
+                    st.success(f"Welcome {user} 🔓")
+                    st.session_state.face_authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Face not recognized")
 
-            if matched:
-
-                st.success(f"Welcome {user} ✅")
-                st.session_state.face_authenticated = True
-                st.rerun()
-
-            else:
-                st.error("Face not recognized ❌")
-
-    # ===============================
-    # ADMIN PANEL AFTER LOGIN
-    # ===============================
     else:
 
-        st.success("Admin Access Granted 🔓")
+        st.success("Admin Access Granted")
 
         st.subheader("➕ Add New Rule")
 
         title = st.text_input("Rule Title")
 
-        description = st.text_area(
-            "Enter Rule Points (One per line)",
-            height=150
-        )
+        description = st.text_area("Enter Rule Points (One per line)")
 
         image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
 
@@ -205,32 +224,24 @@ if menu == "🔐 Admin Panel":
             else:
                 st.warning("Title and Description Required")
 
-        # ===============================
-        # EDIT / DELETE RULES
-        # ===============================
         st.subheader("✏ Manage Existing Rules")
 
         for rule in rules:
 
             with st.expander(rule["title"]):
 
-                new_title = st.text_input(
-                    "Edit Title",
-                    rule["title"],
-                    key=rule["id"] + "title"
-                )
+                new_title = st.text_input("Edit Title", rule["title"], key=rule["id"]+"title")
 
                 new_description = st.text_area(
-                    "Edit Description (One per line)",
+                    "Edit Description",
                     "\n".join(rule["description"]),
-                    key=rule["id"] + "desc"
+                    key=rule["id"]+"desc"
                 )
 
                 col1, col2 = st.columns(2)
 
                 with col1:
-
-                    if st.button("Update", key=rule["id"] + "update"):
+                    if st.button("Update", key=rule["id"]+"update"):
 
                         rule["title"] = new_title
                         rule["description"] = [
@@ -243,8 +254,7 @@ if menu == "🔐 Admin Panel":
                         st.success("Updated Successfully")
 
                 with col2:
-
-                    if st.button("Delete", key=rule["id"] + "delete"):
+                    if st.button("Delete", key=rule["id"]+"delete"):
 
                         rules.remove(rule)
                         save_rules(rules)
