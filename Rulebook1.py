@@ -48,6 +48,9 @@ face_cascade = cv2.CascadeClassifier(
 
 def detect_face(img):
 
+    if img is None:
+        return None
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
@@ -56,13 +59,17 @@ def detect_face(img):
         return None
 
     x, y, w, h = faces[0]
+
     return img[y:y+h, x:x+w]
 
 
 def face_similarity(face1, face2):
 
-    face1 = cv2.resize(face1, (200,200))
-    face2 = cv2.resize(face2, (200,200))
+    if face1 is None or face2 is None:
+        return 999
+
+    face1 = cv2.resize(face1, (200, 200))
+    face2 = cv2.resize(face2, (200, 200))
 
     diff = cv2.absdiff(face1, face2)
 
@@ -108,7 +115,7 @@ menu = st.sidebar.radio("Navigation", ["📖 View Rules","🔐 Admin Panel"])
 # ===============================
 if menu == "📖 View Rules":
 
-    st.markdown('<div class="main-title">📊 MY TRADING RULEBOOK</div>',unsafe_allow_html=True)
+    st.markdown('<div class="main-title">📊 MY TRADING RULEBOOK</div>', unsafe_allow_html=True)
 
     if not rules:
         st.info("No rules added yet.")
@@ -116,17 +123,17 @@ if menu == "📖 View Rules":
 
         for rule in rules:
 
-            st.markdown(f'<div class="rule-header">{rule["title"]}</div>',unsafe_allow_html=True)
+            st.markdown(f'<div class="rule-header">{rule["title"]}</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="rule-box">',unsafe_allow_html=True)
+            st.markdown('<div class="rule-box">', unsafe_allow_html=True)
 
             for point in rule["description"]:
                 st.markdown(f"• {point}")
 
-            st.markdown('</div>',unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
             if rule["image"] and os.path.exists(rule["image"]):
-                st.image(rule["image"],use_container_width=True)
+                st.image(rule["image"], use_container_width=True)
 
             st.markdown("---")
 
@@ -143,8 +150,12 @@ if menu == "🔐 Admin Panel":
 
         if img_file:
 
+            # Convert camera image
             img = Image.open(img_file)
             img = np.array(img)
+
+            # Convert RGB to BGR for OpenCV
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
             captured_face = detect_face(img)
 
@@ -155,19 +166,20 @@ if menu == "🔐 Admin Panel":
             else:
 
                 match = False
+                user = ""
 
                 for file in os.listdir(FACE_DB):
 
-                    db_path = os.path.join(FACE_DB,file)
+                    db_path = os.path.join(FACE_DB, file)
 
                     db_img = cv2.imread(db_path)
 
-                    db_face = detect_face(db_img)
-
-                    if db_face is None:
+                    if db_img is None:
                         continue
 
-                    score = face_similarity(captured_face,db_face)
+                    db_face = detect_face(db_img)
+
+                    score = face_similarity(captured_face, db_face)
 
                     if score < 40:
                         match = True
@@ -194,7 +206,7 @@ if menu == "🔐 Admin Panel":
 
         description = st.text_area("Enter Rule Points (One per line)")
 
-        image_file = st.file_uploader("Upload Image",type=["png","jpg","jpeg"])
+        image_file = st.file_uploader("Upload Image", type=["png","jpg","jpeg"])
 
         if st.button("Save Rule"):
 
