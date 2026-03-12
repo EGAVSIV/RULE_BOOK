@@ -3,7 +3,8 @@ from PIL import Image
 import os
 import json
 import uuid
-import face_recognition
+from deepface import DeepFace
+import tempfile
 import numpy as np
 
 # ======================================
@@ -136,46 +137,42 @@ if menu == "🔐 Admin Panel":
 
         if img_file is not None:
 
-            image = face_recognition.load_image_file(img_file)
-            encodings = face_recognition.face_encodings(image)
+            # Save captured image temporarily
+            temp_file = tempfile.NamedTemporaryFile(delete=False)
+            temp_file.write(img_file.getvalue())
+            captured_path = temp_file.name
 
-            if encodings:
+            matched = False
 
-                face_encoding = encodings[0]
+            for file in os.listdir(FACE_DB):
 
-                distances = face_recognition.face_distance(
-                    known_encodings, face_encoding
-                )
+                db_img = os.path.join(FACE_DB, file)
 
-                if len(distances) > 0 and min(distances) < 0.5:
+                try:
+                    result = DeepFace.verify(
+                        img1_path=captured_path,
+                        img2_path=db_img,
+                        enforce_detection=False
+                    )
 
-                    idx = np.argmin(distances)
-                    user = known_names[idx]
+                    if result["verified"]:
+                        matched = True
+                        user = file.split(".")[0]
+                        break
 
-                    st.success(f"Welcome {user} ✅")
-                    st.session_state.face_authenticated = True
-                    st.rerun()
+                except:
+                    pass
 
-                else:
-                    st.error("Face not recognized ❌")
+            if matched:
+
+                st.success(f"Welcome {user} ✅")
+                st.session_state.face_authenticated = True
+                st.rerun()
 
             else:
-                st.warning("No face detected")
+                st.error("Face not recognized ❌")
 
-    else:
-
-        st.success("Admin Access Granted 🔓")
-
-        st.subheader("➕ Add New Rule")
-
-        title = st.text_input("Rule Title")
-
-        description = st.text_area(
-            "Enter Rule Points (One per line)",
-            height=150
-        )
-
-        image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
+            image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
 
         if st.button("Save Rule"):
 
