@@ -5,7 +5,6 @@ import json
 import uuid
 from deepface import DeepFace
 import tempfile
-import numpy as np
 
 # ======================================
 # CONFIG
@@ -18,27 +17,6 @@ FACE_DB = "faces_db"
 
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 os.makedirs(FACE_DB, exist_ok=True)
-
-# ======================================
-# LOAD FACE DATABASE
-# ======================================
-known_encodings = []
-known_names = []
-
-for file in os.listdir(FACE_DB):
-    img_path = os.path.join(FACE_DB, file)
-
-    try:
-        img = face_recognition.load_image_file(img_path)
-        enc = face_recognition.face_encodings(img)
-
-        if enc:
-            known_encodings.append(enc[0])
-            known_names.append(file.split(".")[0])
-
-    except:
-        pass
-
 
 # ======================================
 # SESSION STATE
@@ -129,6 +107,9 @@ if menu == "📖 View Rules":
 # ======================================
 if menu == "🔐 Admin Panel":
 
+    # ===============================
+    # FACE AUTHENTICATION
+    # ===============================
     if not st.session_state.face_authenticated:
 
         st.subheader("📷 Face Authentication Required")
@@ -137,12 +118,12 @@ if menu == "🔐 Admin Panel":
 
         if img_file is not None:
 
-            # Save captured image temporarily
             temp_file = tempfile.NamedTemporaryFile(delete=False)
             temp_file.write(img_file.getvalue())
             captured_path = temp_file.name
 
             matched = False
+            user = ""
 
             for file in os.listdir(FACE_DB):
 
@@ -172,7 +153,23 @@ if menu == "🔐 Admin Panel":
             else:
                 st.error("Face not recognized ❌")
 
-            image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
+    # ===============================
+    # ADMIN PANEL AFTER LOGIN
+    # ===============================
+    else:
+
+        st.success("Admin Access Granted 🔓")
+
+        st.subheader("➕ Add New Rule")
+
+        title = st.text_input("Rule Title")
+
+        description = st.text_area(
+            "Enter Rule Points (One per line)",
+            height=150
+        )
+
+        image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
 
         if st.button("Save Rule"):
 
@@ -208,9 +205,9 @@ if menu == "🔐 Admin Panel":
             else:
                 st.warning("Title and Description Required")
 
-        # ======================================
+        # ===============================
         # EDIT / DELETE RULES
-        # ======================================
+        # ===============================
         st.subheader("✏ Manage Existing Rules")
 
         for rule in rules:
